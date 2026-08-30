@@ -2,10 +2,24 @@
 
 import { NextResponse } from "next/server";
 import { makeApiRequest } from "@/lib/moviebox";
-import { processSearchTerm } from "@/lib/search-filter"; // <-- Filter ko import kiya
+import { processSearchTerm } from "@/lib/search-filter";
 
 const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
 const PAGE_SIZE = 12;
+
+// Yahan naye keywords add kar diye hain jo screenshot mein dikh rahe hain
+const BLOCKED_KEYWORDS = [
+  "hentai",
+  "ecchi",
+  "18+",
+  "uncensored",
+  "adult",
+  "jav",
+  "nsfw",
+  "anime edition",
+  "seduced",
+  "big girls",
+];
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -18,10 +32,8 @@ export async function GET(request: Request) {
       ? pageParam
       : 1;
 
-  // Search term ko filter function se process karo
   const filterResult = processSearchTerm(rawQuery);
 
-  // Agar query allowed nahi hai (jaise plain "xxx", "porn", etc.)
   if (!filterResult.allowed || !filterResult.searchTerm) {
     return NextResponse.json({
       results: [],
@@ -34,7 +46,6 @@ export async function GET(request: Request) {
     });
   }
 
-  // Ab yahan cleaned search term use hogi (jaise "xxx057" se "xxx" ban jayegi)
   const q = filterResult.searchTerm;
 
   try {
@@ -80,6 +91,11 @@ export async function GET(request: Request) {
           subject.name ||
           "";
 
+        const genres = subject.genre || subject.genres || item.genre || "";
+        const genreStr = Array.isArray(genres) 
+          ? genres.join(" ").toLowerCase() 
+          : String(genres).toLowerCase();
+
         return {
           id,
           subjectId: id,
@@ -122,15 +138,33 @@ export async function GET(request: Request) {
             1,
 
           hasResource: true,
-          genre: "",
+          genre: genreStr,
           duration: 0,
         };
       })
-      .filter(
-        (item: any) =>
-          item.title &&
-          (item.id || item.slug)
-      );
+      .filter((item: any) => {
+        if (!item.title || (!item.id && !item.slug)) {
+          return false;
+        }
+
+        // Agar user ne '057' override use kiya hai, toh sab dikhao
+        if (filterResult.override) {
+          return true;
+        }
+
+        const lowerTitle = item.title.toLowerCase();
+        const lowerGenre = item.genre.toLowerCase();
+
+        const isAdultContent = BLOCKED_KEYWORDS.some(
+          (word) => lowerTitle.includes(word) || lowerGenre.includes(word)
+        );
+
+        if (isAdultContent) {
+          return false;
+        }
+
+        return true;
+      });
 
     const hasMore =
       apiHasMore ||
