@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import HlsVideoPlayer from "@/components/HlsVideoPlayer";
-import { makeApiRequest } from "@/lib/moviebox";
 
 type Props = {
   params: Promise<{
@@ -16,29 +15,16 @@ type Props = {
 };
 
 async function getDetail(slug: string) {
-  const API_BASE =
-    "https://h5-api.aoneroom.com/wefeed-h5api-bff";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const url = `${baseUrl}/api/detail/${encodeURIComponent(slug)}`;
 
-  const url =
-    `${API_BASE}/detail?detailPath=${encodeURIComponent(slug)}` +
-    `&se=1&ep=1`;
+  const res = await fetch(url, { cache: "no-store" });
 
-  console.log("🔍 WATCH DETAIL URL:", url);
-
-  const data = await makeApiRequest(url);
-
-  console.log("✅ WATCH DETAIL DATA:", {
-    hasData: !!data?.data,
-    subjectId: data?.data?.subject?.subjectId,
-    title: data?.data?.subject?.title,
-    hasResource: data?.data?.subject?.hasResource,
-  });
-
-  if (!data?.data) {
-    throw new Error("Detail API returned no data");
+  if (!res.ok) {
+    throw new Error(`Failed to fetch detail: ${res.status}`);
   }
 
-  return data;
+  return res.json();
 }
 
 export default async function WatchPage({
@@ -87,50 +73,20 @@ export default async function WatchPage({
     notFound();
   }
 
- // Get actual subject object from API response
-const subject = movie?.subject || movie;
+  // ✅ Extract subject type
+  const subjectType = movie?.subjectType || movie?.subject?.subjectType || 1;
+  const isMovie = subjectType === 1;
+  
+  console.log(`📽️ Subject Type: ${subjectType} (${isMovie ? 'Movie' : 'Series'})`);
 
-// Subject type:
-// 1 = Movie
-// 2 = Series
-const subjectType = Number(subject?.subjectType ?? 1);
-const isMovie = subjectType === 1;
-
-console.log("🎬 CONTENT TYPE:", {
-  subjectType,
-  isMovie,
-  type: isMovie ? "Movie" : "Series",
-});
-
-// IMPORTANT: subjectId is inside subject
-const subjectId =
-  id ||
-  subject?.subjectId ||
-  movie?.subjectId ||
-  movie?.id ||
-  "";
-
-const detailPath =
-  movie?.detailPath ||
-  subject?.detailPath ||
-  slug;
-
-// Movie = always season 1 episode 1
-// Series = URL season/episode or default 1/1
-const season = isMovie
-  ? 1
-  : (se ? Number(se) : 1);
-
-const episode = isMovie
-  ? 1
-  : (ep ? Number(ep) : 1);
-
-console.log("▶️ WATCH CONFIG:", {
-  subjectId,
-  detailPath,
-  season,
-  episode,
-});
+  // ✅ For Movies: se=1, ep=1 (default)
+  // ✅ For Series: use provided se/ep
+  const subjectId = id || movie?.subjectId || movie?.id || "";
+  const detailPath = movie?.detailPath || movie?.subject?.detailPath || slug;
+  
+  // ✅ Movies always use season=1, episode=1
+  const season = isMovie ? 1 : (se ? parseInt(se) : 1);
+  const episode = isMovie ? 1 : (ep ? parseInt(ep) : 1);
 
   // Movie info
   const title = movie?.title || movie?.subject?.title || "Movie";

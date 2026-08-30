@@ -9,15 +9,6 @@ const BANNED_TERMS = [
 
 const OVERRIDE_CODE = "057";
 
-// Agar backend API direct "sex" ya "porn" keyword par result nahi deti, 
-// toh yahan aap mapping set kar sakte hain ki 057 lagane par API ko kya bhejna hai.
-const BACKEND_MAPPINGS: Record<string, string> = {
-  "xxx": "xxx",       // Agar xxx chal jata hai
-  "sex": "romance",   // Example: Agar sex likhne par API block kare, toh aap yahan koi aur term ya tag daal sakte hain jo API accept kare
-  "porn": "adult",    // Example: porn057 likhne par API ko "adult" bhej sakte hain
-  "adult": "adult",
-};
-
 export function processSearchTerm(input: string | null | undefined) {
   const original = (input ?? "").trim().toLowerCase();
 
@@ -29,33 +20,32 @@ export function processSearchTerm(input: string | null | undefined) {
     };
   }
 
-  // 1. Check karo ki kya query override code (057) se end ho rahi hai
+  // 1. Pehle check karo ki kya query override code (057) se end ho rahi hai ya nahi
   const endsWithOverride = original.endsWith(OVERRIDE_CODE);
 
   if (endsWithOverride) {
+    // Agar 057 se end ho rahi hai, toh 057 hata kar cleaned term nikal lo
     const cleaned = original
       .slice(0, -OVERRIDE_CODE.length)
       .trim();
 
+    // Check karo ki kya cleaned term ke andar koi banned term aata hai
     const containsBanned = BANNED_TERMS.some((term) => cleaned.includes(term));
 
     if (containsBanned) {
-      // Yahan hum decide karte hain ki API ko kya keyword bhejna hai
-      // Agar mapping mein word hai toh wo jayega, nahi toh cleaned term jayegi
-      const finalTerm = BACKEND_MAPPINGS[cleaned] || cleaned;
-
       return {
         allowed: true,
-        searchTerm: finalTerm,
+        searchTerm: cleaned, // Jaise "xxx057" se "xxx" ban jayega aur allow ho jayega
         override: true,
       };
     }
   }
 
-  // 2. Normal check: Agar 057 nahi hai aur banned term hai toh block kar do
+  // 2. Agar 057 nahi laga hai, toh check karo kya query mein koi bhi banned term aata hai (chahe aage kuch bhi likha ho jaise "xxxw", "sex video", etc.)
   const containsBanned = BANNED_TERMS.some((term) => original.includes(term));
 
   if (containsBanned) {
+    // Agar banned term mil gaya aur 057 nahi tha, toh seedha block kar do
     return {
       allowed: false,
       searchTerm: original,
@@ -64,9 +54,9 @@ export function processSearchTerm(input: string | null | undefined) {
     };
   }
 
-  // 3. Normal searches
+  // 3. Normal search jo banned terms mein nahi aati (jaise "spider-man", "action movie")
   return {
-        allowed: true,
+    allowed: true,
     searchTerm: original,
     override: false,
   };
