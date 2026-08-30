@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import HlsVideoPlayer from "@/components/HlsVideoPlayer";
+import { makeApiRequest } from "@/lib/moviebox";
 
 type Props = {
   params: Promise<{
@@ -15,16 +16,29 @@ type Props = {
 };
 
 async function getDetail(slug: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const url = `${baseUrl}/api/detail/${encodeURIComponent(slug)}`;
+  const API_BASE =
+    "https://h5-api.aoneroom.com/wefeed-h5api-bff";
 
-  const res = await fetch(url, { cache: "no-store" });
+  const url =
+    `${API_BASE}/detail?detailPath=${encodeURIComponent(slug)}` +
+    `&se=1&ep=1`;
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch detail: ${res.status}`);
+  console.log("🔍 WATCH DETAIL URL:", url);
+
+  const data = await makeApiRequest(url);
+
+  console.log("✅ WATCH DETAIL DATA:", {
+    hasData: !!data?.data,
+    subjectId: data?.data?.subject?.subjectId,
+    title: data?.data?.subject?.title,
+    hasResource: data?.data?.subject?.hasResource,
+  });
+
+  if (!data?.data) {
+    throw new Error("Detail API returned no data");
   }
 
-  return res.json();
+  return data;
 }
 
 export default async function WatchPage({
@@ -76,14 +90,14 @@ export default async function WatchPage({
   // ✅ Extract subject type
   const subjectType = movie?.subjectType || movie?.subject?.subjectType || 1;
   const isMovie = subjectType === 1;
-  
+
   console.log(`📽️ Subject Type: ${subjectType} (${isMovie ? 'Movie' : 'Series'})`);
 
   // ✅ For Movies: se=1, ep=1 (default)
   // ✅ For Series: use provided se/ep
   const subjectId = id || movie?.subjectId || movie?.id || "";
   const detailPath = movie?.detailPath || movie?.subject?.detailPath || slug;
-  
+
   // ✅ Movies always use season=1, episode=1
   const season = isMovie ? 1 : (se ? parseInt(se) : 1);
   const episode = isMovie ? 1 : (ep ? parseInt(ep) : 1);
