@@ -7,7 +7,6 @@ import { processSearchTerm } from "@/lib/search-filter";
 const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
 const PAGE_SIZE = 12;
 
-// Yahan naye keywords add kar diye hain jo screenshot mein dikh rahe hain
 const BLOCKED_KEYWORDS = [
   "hentai",
   "ecchi",
@@ -16,9 +15,6 @@ const BLOCKED_KEYWORDS = [
   "adult",
   "jav",
   "nsfw",
-  "anime edition",
-  "seduced",
-  "big girls",
 ];
 
 export async function GET(request: Request) {
@@ -147,7 +143,7 @@ export async function GET(request: Request) {
           return false;
         }
 
-        // Agar user ne '057' override use kiya hai, toh sab dikhao
+        // Agar user ne '057' code use kiya hai, toh filters bypass karke sab show karo
         if (filterResult.override) {
           return true;
         }
