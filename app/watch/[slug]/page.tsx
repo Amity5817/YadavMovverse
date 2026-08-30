@@ -14,29 +14,20 @@ type Props = {
   }>;
 };
 
-// app/watch/[slug]/page.tsx - Updated getDetail function
+async function getDetail(slug: string) {
+  // 1. Sabse pehle environment variable ya domain check karein
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 
+                  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  
+  const url = `${siteUrl}/api/detail/${encodeURIComponent(slug)}`;
 
-async function getDetail(slug: string, requestUrl?: string) {
-  // Relative fetch use karne se Vercel production par localhost ki dependency khatam ho jati hai
-  try {
-    const res = await fetch(`/api/detail/${encodeURIComponent(slug)}`, { cache: "no-store" });
-    if (res.ok) {
-      return res.json();
-    }
-  } catch (e) {
-    // Ignore and fallback
+  const res = await fetch(url, { cache: "no-store" });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch detail: ${res.status}`);
   }
 
-  // Agar relative fail ho toh absolute fallback try karo agar environment variable available ho
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yadavmovverse.vercel.app";
-  const url = `${baseUrl}/api/detail/${encodeURIComponent(slug)}`;
-  const fallbackRes = await fetch(url, { cache: "no-store" });
-
-  if (!fallbackRes.ok) {
-    throw new Error(`Failed to fetch detail: ${fallbackRes.status}`);
-  }
-
-  return fallbackRes.json();
+  return res.json();
 }
 
 export default async function WatchPage({
