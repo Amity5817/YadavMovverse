@@ -14,17 +14,22 @@ function SearchFormContent() {
   const [query, setQuery] = useState(queryParam);
   const [items, setItems] = useState<Content[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalResults, setTotalResults] = useState(0);
   const [fetchedCount, setFetchedCount] = useState(0);
-  const [allLoaded, setAllLoaded] = useState(false);
-  
+  const [totalResults, setTotalResults] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
   // New states for tags
   const [searchTags, setSearchTags] = useState<string[]>([]);
   const [showTagInput, setShowTagInput] = useState(false);
   const [tempTag, setTempTag] = useState("");
   const [pendingTag, setPendingTag] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const loaderRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRef = useRef(false);
 
   // Load saved tags from localStorage on mount
   useEffect(() => {
@@ -43,81 +48,229 @@ function SearchFormContent() {
     localStorage.setItem("searchTags", JSON.stringify(searchTags));
   }, [searchTags]);
 
-  const fetchSearchResults = async (searchTerm: string) => {
-    if (!searchTerm.trim()) {
+  const fetchSearchResults = async (
+    searchTerm: string,
+    page = 1,
+    append = false
+  ) => {
+    const trimmedSearch = searchTerm.trim();
+
+    if (!trimmedSearch) {
       setItems([]);
       setTotalResults(0);
-      setFetchedCount(0);
-      setAllLoaded(false);
+      setCurrentPage(0);
+      setHasMore(false);
       return;
     }
 
-    setLoading(true);
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setItems([]);
+      setCurrentPage(0);
+      setHasMore(false);
+    }
+
     setError(null);
 
     try {
       const response = await fetch(
-        `/api/search?q=${encodeURIComponent(searchTerm.trim())}`
+        `/api/search?q=${encodeURIComponent(
+          trimmedSearch
+        )}&page=${page}`,
+        {
+          cache: "no-store",
+        }
       );
-      
+
       if (!response.ok) {
-        throw new Error(`Search failed: ${response.status}`);
+        throw new Error(
+          `Search failed: ${response.status}`
+        );
       }
 
       const json = await response.json();
-      console.log("📦 Search response:", json);
-
       const rawResults = json.results || [];
-      const total = json.total || 0;
-      const fetched = json.fetched || rawResults.length;
-      const loaded = json.allLoaded || false;
 
-      setTotalResults(total);
-      setFetchedCount(fetched);
-      setAllLoaded(loaded || fetched >= total);
+      const mappedItems: Content[] = rawResults.map(
+        (item: any) => ({
+          id: String(
+            item.id ||
+            item.subjectId ||
+            ""
+          ),
 
-      // 🔥 FIX: Remove duplicates using a Set
-      const uniqueResults = Array.from(
-        new Map(rawResults.map((item: any) => [
-          item.id || item.subjectId || item.detailPath || Math.random().toString(),
-          item
-        ])).values()
+          subjectId: String(
+            item.subjectId ||
+            item.id ||
+            ""
+          ),
+
+          title: item.title || "Untitled",
+
+          slug:
+            item.slug ||
+            item.detailPath ||
+            item.id ||
+            "",
+
+          detailPath:
+            item.detailPath ||
+            item.slug ||
+            "",
+
+          poster:
+            item.poster ||
+            item.cover ||
+            "",
+
+          cover:
+            item.cover ||
+            item.poster ||
+            "",
+
+          year: Number(item.year) || 0,
+
+          rating:
+            Number(
+              item.imdbRating ||
+              item.rating
+            ) || 0,
+
+          imdbRating:
+            Number(
+              item.imdbRating ||
+              item.rating
+            ) || 0,
+
+          genre: item.genre || "",
+
+          duration:
+            item.duration || 0,
+
+          hasResource:
+            item.hasResource ?? true,
+
+          subjectType:
+            item.subjectType || 1,
+        })
       );
 
-      const mappedItems: Content[] = uniqueResults.map((item: any) => ({
-        id: String(item.id || item.subjectId || ""),
-        subjectId: String(item.subjectId || item.id || ""),
-        title: item.title || "Untitled",
-        slug: item.slug || item.detailPath || item.id || "",
-        detailPath: item.detailPath || item.slug || "",
-        poster: item.poster || item.cover || "",
-        cover: item.cover || item.poster || "",
-        year: Number(item.year) || 0,
-        rating: Number(item.imdbRating || item.rating) || 0,
-        imdbRating: Number(item.imdbRating || item.rating) || 0,
-        genre: item.genre || "",
-        duration: item.duration || 0,
-        hasResource: true,
-        subjectType: item.subjectType || 1,
-      }));
+      if (append) {
+        setItems((previous) => {
+          const existingIds = new Set(
+            previous.map(
+              (item) =>
+                item.id ||
+                item.subjectId
+            )
+          );
 
-      setItems(mappedItems);
+          const newItems =
+            mappedItems.filter(
+              (item) =>
+                !existingIds.has(
+                  item.id ||
+                  item.subjectId
+                )
+            );
 
+          return [
+            ...previous,
+            ...newItems,
+          ];
+        });
+      } else {
+        setItems(mappedItems);
+      }
+
+      setTotalResults(
+        Number(json.total) || 0
+      );
+
+      setCurrentPage(page);
+      setHasMore(
+        Boolean(json.hasMore)
+      );
     } catch (err: any) {
-      console.error("❌ Search fetch error:", err);
-      setError(err.message || "Failed to fetch results");
-      setItems([]);
+      console.error(
+        "❌ Search fetch error:",
+        err
+      );
+
+      setError(
+        err?.message ||
+        "Failed to fetch results"
+      );
+
+      if (!append) {
+        setItems([]);
+      }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
+    const loader = loaderRef.current;
+
+    if (!loader) return;
+    if (!queryParam) return;
+
+    const observer = new IntersectionObserver(
+      async (entries) => {
+        const entry = entries[0];
+
+        if (!entry.isIntersecting) return;
+        if (loadingMoreRef.current) return;
+        if (!hasMore) return;
+
+        loadingMoreRef.current = true;
+
+        try {
+          await fetchSearchResults(
+            queryParam,
+            currentPage + 1,
+            true
+          );
+        } finally {
+          loadingMoreRef.current = false;
+        }
+      },
+      {
+        root: null,
+        rootMargin: "1000px 0px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(loader);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [
+    queryParam,
+    currentPage,
+    hasMore,
+  ]);
+
+
+
+  useEffect(() => {
     if (queryParam) {
       setQuery(queryParam);
-      fetchSearchResults(queryParam);
+      fetchSearchResults(
+        queryParam,
+        1,
+        false
+      );
     }
   }, [queryParam]);
+
+
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,7 +466,7 @@ function SearchFormContent() {
         ) : error ? (
           <div className="py-12 text-center">
             <p className="text-red-500">❌ Error: {error}</p>
-            <button 
+            <button
               onClick={() => fetchSearchResults(query)}
               className="mt-4 px-6 py-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 text-sm"
             >
@@ -332,7 +485,7 @@ function SearchFormContent() {
                   Results for "{queryParam || query}"
                 </h2>
                 <span className="text-sm text-zinc-500">
-                  {fetchedCount > 0 && fetchedCount < totalResults 
+                  {fetchedCount > 0 && fetchedCount < totalResults
                     ? `${items.length} of ${totalResults} results`
                     : `${totalResults || items.length} results found`
                   }
@@ -340,33 +493,48 @@ function SearchFormContent() {
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
-                {items.map((item, index) => {
-                  // 🔥 FIX: Create a more unique key
-                  const uniqueKey = `${item.id}-${item.slug}-${index}-${Date.now()}`;
-                  return (
-                    <ContentCard
-                      key={uniqueKey}
-                      item={item}
-                    />
-                  );
-                })}
+                {items.map((item) => (
+                  <ContentCard
+                    key={`${item.id}-${item.slug}`}
+                    item={item}
+                  />
+                ))}
               </div>
 
-              {!loading && !allLoaded && items.length < totalResults && (
-                <div className="mt-6 text-center text-sm text-yellow-500">
-                  ⏳ Loading more results... ({items.length} of {totalResults})
+              {/* INFINITE SCROLL SENTINEL */}
+              <div
+                ref={loaderRef}
+                className="h-32 w-full"
+              >
+                {loadingMore && (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-400">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-rose-500 border-t-transparent" />
+                    Loading more movies...
+                  </div>
+                )}
+              </div>
+
+              {!hasMore && items.length > 0 && (
+                <div className="py-8 text-center text-sm text-zinc-500">
+                  ✓ All {items.length} results loaded
                 </div>
               )}
 
-              {!loading && allLoaded && items.length === totalResults && (
-                <div className="mt-8 text-center text-sm text-zinc-500">
-                  ✓ All {totalResults} results loaded
-                </div>
-              )}
+              <div
+                ref={loaderRef}
+                className="h-24"
+              >
+                {loadingMore && (
+                  <div className="flex items-center justify-center gap-2 py-6 text-sm text-zinc-400">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-rose-500 border-t-transparent" />
+                    Loading more movies...
+                  </div>
+                )}
+              </div>
 
-              {!loading && allLoaded && items.length < totalResults && (
-                <div className="mt-8 text-center text-sm text-yellow-500">
-                  ⚠️ Showing {items.length} of {totalResults} results (API limit)
+              {!hasMore && items.length > 0 && (
+                <div className="py-8 text-center text-sm text-zinc-500">
+                  ✓ All {items.length} results loaded
                 </div>
               )}
             </div>
