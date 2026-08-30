@@ -1,4 +1,4 @@
-// app/api/stream/[subjectId]/route.ts - Fixed with robust error handling and fallback
+// app/api/stream/[subjectId]/route.ts - Updated with better quality detection
 import { NextRequest, NextResponse } from "next/server";
 import { makeApiRequest, PLAYER_HEADERS } from "@/lib/moviebox";
 
@@ -57,8 +57,6 @@ export async function GET(
       `${domain}/wefeed-h5api-bff/subject/play?subjectId=${subjectId}&detailPath=${detailPath}`,
       `${domain}/wefeed-h5api-bff/subject/play?subjectId=${subjectId}`,
       `${domain}/wefeed-h5api-bff/media-player/get-play-info?mediaId=${subjectId}`,
-      // Fallback direct gateway endpoint for live deployment bypass
-      `${API_BASE}/subject/play?subjectId=${subjectId}&se=${se}&ep=${ep}`
     ];
 
     for (const url of attempts) {
@@ -68,8 +66,8 @@ export async function GET(
         const json = await res.json();
         console.log(`📦 Response from ${url}:`, JSON.stringify(json, null, 2).substring(0, 500));
         
-        if (json?.data?.sources?.length || json?.data?.hls?.length || json?.data?.hasResource || json?.sources?.length) {
-          playData = json.data || json;
+        if (json?.data?.sources?.length || json?.data?.hls?.length || json?.data?.hasResource) {
+          playData = json.data;
           console.log(`✅ Found play data from: ${url}`);
           break;
         }
@@ -82,20 +80,29 @@ export async function GET(
       playData = {};
     }
 
+    console.log("📦 PlayData keys:", Object.keys(playData));
+
     // 4. Process Streams - Extract ALL Qualities
     const rawStreams = playData.sources || playData.streams || [];
     console.log(`📦 Raw streams: ${rawStreams.length} items`);
 
+    // Quality map to store all unique qualities
     const qualityMap: Record<string, any> = {};
     const qualityList: string[] = [];
 
+    // Process each source and detect quality
     rawStreams.forEach((source: any) => {
       if (!source.url || source.url.trim() === "") return;
 
       let resolution = source.resolution || source.resolutions || source.quality || source.label || '';
       
+      console.log(`🔍 Processing source:`, { resolution, url: source.url.substring(0, 100) });
+
+      // Clean and detect quality
       if (typeof resolution === 'string') {
         resolution = resolution.toLowerCase();
+        
+        // Extract number from resolution
         const match = resolution.match(/(\d+)/);
         if (match) {
           const num = parseInt(match[1]);
@@ -110,12 +117,13 @@ export async function GET(
         } else if (resolution.includes('sd')) {
           resolution = '480p';
         } else {
-          resolution = '480p';
+          resolution = '480p'; // Default fallback
         }
       } else {
         resolution = '480p';
       }
 
+      // Store in quality map
       if (!qualityMap[resolution]) {
         qualityMap[resolution] = {
           resolution: resolution,
@@ -124,9 +132,11 @@ export async function GET(
           size: source.size || 0,
         };
         qualityList.push(resolution);
+        console.log(`✅ Added quality: ${resolution}`);
       }
     });
 
+    // HLS streams (adaptive quality)
     const hlsSources = (playData.hls || [])
       .filter((h: any) => h.url && h.url.trim() !== "")
       .map((h: any) => ({
@@ -135,7 +145,10 @@ export async function GET(
         url: h.url,
       }));
 
-    if (hlsSources.length > 0 && !qualityMap['auto']) {
+    console.log(`📦 HLS sources: ${hlsSources.length} items`);
+
+    // If HLS is available, add it as 'auto' quality
+    if (hlsSources.length > 0) {
       qualityMap['auto'] = {
         resolution: 'auto',
         url: hlsSources[0].url,
@@ -144,6 +157,7 @@ export async function GET(
       qualityList.push('auto');
     }
 
+    // Sort qualities: 1080p > 720p > 480p > 360p > auto
     const qualityOrder = ['1080p', '720p', '480p', '360p', '240p', 'auto'];
     const sortedQualities = qualityList.sort((a, b) => {
       const indexA = qualityOrder.indexOf(a);
@@ -151,8 +165,13 @@ export async function GET(
       return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
     });
 
+    // Build final sources array
     const finalSources = sortedQualities.map(q => qualityMap[q]);
 
+    console.log(`✅ Final sources: ${finalSources.length} qualities`);
+    finalSources.forEach(s => console.log(`  - ${s.resolution}: ${s.url?.substring(0, 80)}...`));
+
+    // Get best quality for direct play
     const bestQuality = finalSources.find(s => s.resolution === '1080p') ||
                         finalSources.find(s => s.resolution === '720p') ||
                         finalSources.find(s => s.resolution === '480p') ||
@@ -174,8 +193,8 @@ export async function GET(
   } catch (err: any) {
     console.error("❌ Stream error:", err);
     return NextResponse.json(
-      { error: "Failed to fetch stream source", detail: err.message, has_resource: false, sources: [], hls: [] },
-      { status: 200 } // Return status 200 with has_resource false to prevent hard client crashes
+      { error: "Failed to fetch stream source", detail: err.message },
+      { status: 502 }
     );
   }
 }

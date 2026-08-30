@@ -1,4 +1,4 @@
-import type { SubjectItem } from "@/types/api";
+import type { SubjectItem } from "@/lib/api";
 import type { Content } from "@/types/content";
 
 export function mapSubject(item: SubjectItem): Content {

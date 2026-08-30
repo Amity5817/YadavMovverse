@@ -180,24 +180,20 @@ export default function HlsVideoPlayer({
           setHlsStreams(sortedHls);
 
           // AUTO-SELECT BEST QUALITY
+          // AUTO-SELECT BEST QUALITY (Robust for single or multiple resolutions)
           let selectedUrl = null;
           let selectedQualityLabel = 'auto';
 
-          // Try HLS first (better streaming)
           if (sortedHls.length > 0) {
             selectedUrl = sortedHls[0].url;
             selectedQualityLabel = sortedHls[0].resolution || 'auto';
-          }
-          // Then try MP4 sources
-          else if (sortedMp4.length > 0) {
-            // Try 1080p first (only if VIP), then 720p, 480p, 360p
+          } else if (sortedMp4.length > 0) {
+            // Priority check, par agar koi match na ho toh pehli available item utha lo
             const qualityPriority = ['1080p', '720p', '480p', '360p', '240p'];
             let selected = null;
 
             for (const q of qualityPriority) {
-              // Skip 1080p if not VIP
               if (q === '1080p' && !isVipUser) continue;
-              
               const found = sortedMp4.find(s => s.resolution === q);
               if (found) {
                 selected = found;
@@ -206,12 +202,12 @@ export default function HlsVideoPlayer({
               }
             }
 
-            // If no quality match, take first available (skip 1080p if not VIP)
+            // Fallback: Agar upar wale loop mein match na ho (jaise sirf akele 360p ya 480p ho), toh pehli valid item le lo
             if (!selected) {
               const available = isVipUser 
                 ? sortedMp4 
                 : sortedMp4.filter(s => s.resolution !== '1080p');
-              selected = available[0];
+              selected = available[0] || sortedMp4[0]; // Fallback to absolute first if filtered out
               selectedQualityLabel = selected?.resolution || '480p';
             }
 

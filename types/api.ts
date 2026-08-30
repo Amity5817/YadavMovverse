@@ -1,39 +1,31 @@
 // types/api.ts
 
-export interface SubjectItem {
-  subjectId: string;
+export interface Movie {
+  id: string | number;
   title: string;
-  detailPath: string;
-  cover?: {
-    url?: string;
-  };
-  releaseDate?: string;
-  imdbRatingValue?: string | number;
-  genre?: string;
-  duration?: number;
-  hasResource: boolean;
-  subjectType: number;
+  poster?: string;
+  cover?: string;
+  rating?: number | string;
+  year?: number | string;
+  slug?: string;
+  [key: string]: any;
+}
+
+export interface ApiResponse<T = any> {
+  code: number;
+  message: string;
+  data: T;
 }
 
 export interface SubjectFilterResponse {
-  code?: number;
-  message?: string;
-  data?: {
-    subjectList?: SubjectItem[];
-    total?: number;
-    page?: number;
-    perPage?: number;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
+  list?: Movie[];
+  total?: number;
+  hasMore?: boolean;
+  [key: string]: any;
 }
 
 export interface PlatformResponse {
-  code?: number;
-  message?: string;
-  data?: {
-    platformList?: unknown[];
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
+  platforms?: any[];
+  list?: any[];
+  [key: string]: any;
 }
