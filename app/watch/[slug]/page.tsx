@@ -15,13 +15,18 @@ type Props = {
 };
 
 async function getDetail(slug: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const url = `${baseUrl}/api/detail/${encodeURIComponent(slug)}`;
-
-  const res = await fetch(url, { cache: "no-store" });
+  // Relative URL use karein taaki Vercel par internally map ho jaye
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/detail/${encodeURIComponent(slug)}`, { 
+    cache: "no-store" 
+  });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch detail: ${res.status}`);
+    // Fallback: Agar absolute URL fail ho toh relative fetch try karein
+    const relativeRes = await fetch(`/api/detail/${encodeURIComponent(slug)}`, { cache: "no-store" });
+    if (!relativeRes.ok) {
+      throw new Error(`Failed to fetch detail: ${res.status}`);
+    }
+    return relativeRes.json();
   }
 
   return res.json();
