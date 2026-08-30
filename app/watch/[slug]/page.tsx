@@ -14,22 +14,29 @@ type Props = {
   }>;
 };
 
-async function getDetail(slug: string) {
-  // Relative URL use karein taaki Vercel par internally map ho jaye
-  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/detail/${encodeURIComponent(slug)}`, { 
-    cache: "no-store" 
-  });
+// app/watch/[slug]/page.tsx - Updated getDetail function
 
-  if (!res.ok) {
-    // Fallback: Agar absolute URL fail ho toh relative fetch try karein
-    const relativeRes = await fetch(`/api/detail/${encodeURIComponent(slug)}`, { cache: "no-store" });
-    if (!relativeRes.ok) {
-      throw new Error(`Failed to fetch detail: ${res.status}`);
+async function getDetail(slug: string, requestUrl?: string) {
+  // Relative fetch use karne se Vercel production par localhost ki dependency khatam ho jati hai
+  try {
+    const res = await fetch(`/api/detail/${encodeURIComponent(slug)}`, { cache: "no-store" });
+    if (res.ok) {
+      return res.json();
     }
-    return relativeRes.json();
+  } catch (e) {
+    // Ignore and fallback
   }
 
-  return res.json();
+  // Agar relative fail ho toh absolute fallback try karo agar environment variable available ho
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yadavmovverse.vercel.app";
+  const url = `${baseUrl}/api/detail/${encodeURIComponent(slug)}`;
+  const fallbackRes = await fetch(url, { cache: "no-store" });
+
+  if (!fallbackRes.ok) {
+    throw new Error(`Failed to fetch detail: ${fallbackRes.status}`);
+  }
+
+  return fallbackRes.json();
 }
 
 export default async function WatchPage({
