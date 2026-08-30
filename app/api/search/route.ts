@@ -2,16 +2,15 @@
 
 import { NextResponse } from "next/server";
 import { makeApiRequest } from "@/lib/moviebox";
+import { processSearchTerm } from "@/lib/search-filter"; // <-- Filter ko import kiya
 
-const API_BASE =
-  "https://h5-api.aoneroom.com/wefeed-h5api-bff";
-
+const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
 const PAGE_SIZE = 12;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
-  const q = searchParams.get("q")?.trim();
+  const rawQuery = searchParams.get("q");
   const pageParam = Number(searchParams.get("page") ?? "1");
 
   const page =
@@ -19,7 +18,11 @@ export async function GET(request: Request) {
       ? pageParam
       : 1;
 
-  if (!q) {
+  // Search term ko filter function se process karo
+  const filterResult = processSearchTerm(rawQuery);
+
+  // Agar query allowed nahi hai (jaise plain "xxx", "porn", etc.)
+  if (!filterResult.allowed || !filterResult.searchTerm) {
     return NextResponse.json({
       results: [],
       total: 0,
@@ -27,12 +30,16 @@ export async function GET(request: Request) {
       page,
       pageSize: PAGE_SIZE,
       hasMore: false,
+      allLoaded: true,
     });
   }
 
+  // Ab yahan cleaned search term use hogi (jaise "xxx057" se "xxx" ban jayegi)
+  const q = filterResult.searchTerm;
+
   try {
     console.log(
-      `🔍 Search: "${q}" | Page: ${page}`
+      `🔍 Search: "${q}" (Original: "${rawQuery}" | Override: ${filterResult.override}) | Page: ${page}`
     );
 
     const data = await makeApiRequest(
@@ -46,12 +53,8 @@ export async function GET(request: Request) {
     );
 
     const items = data?.data?.items ?? [];
-
-    const totalCount =
-      Number(data?.data?.pager?.totalCount) || 0;
-
-    const apiHasMore =
-      Boolean(data?.data?.pager?.hasMore);
+    const totalCount = Number(data?.data?.pager?.totalCount) || 0;
+    const apiHasMore = Boolean(data?.data?.pager?.hasMore);
 
     const results = items
       .map((item: any) => {
