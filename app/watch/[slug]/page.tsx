@@ -87,20 +87,50 @@ export default async function WatchPage({
     notFound();
   }
 
-  // ✅ Extract subject type
-  const subjectType = movie?.subjectType || movie?.subject?.subjectType || 1;
-  const isMovie = subjectType === 1;
+ // Get actual subject object from API response
+const subject = movie?.subject || movie;
 
-  console.log(`📽️ Subject Type: ${subjectType} (${isMovie ? 'Movie' : 'Series'})`);
+// Subject type:
+// 1 = Movie
+// 2 = Series
+const subjectType = Number(subject?.subjectType ?? 1);
+const isMovie = subjectType === 1;
 
-  // ✅ For Movies: se=1, ep=1 (default)
-  // ✅ For Series: use provided se/ep
-  const subjectId = id || movie?.subjectId || movie?.id || "";
-  const detailPath = movie?.detailPath || movie?.subject?.detailPath || slug;
+console.log("🎬 CONTENT TYPE:", {
+  subjectType,
+  isMovie,
+  type: isMovie ? "Movie" : "Series",
+});
 
-  // ✅ Movies always use season=1, episode=1
-  const season = isMovie ? 1 : (se ? parseInt(se) : 1);
-  const episode = isMovie ? 1 : (ep ? parseInt(ep) : 1);
+// IMPORTANT: subjectId is inside subject
+const subjectId =
+  id ||
+  subject?.subjectId ||
+  movie?.subjectId ||
+  movie?.id ||
+  "";
+
+const detailPath =
+  movie?.detailPath ||
+  subject?.detailPath ||
+  slug;
+
+// Movie = always season 1 episode 1
+// Series = URL season/episode or default 1/1
+const season = isMovie
+  ? 1
+  : (se ? Number(se) : 1);
+
+const episode = isMovie
+  ? 1
+  : (ep ? Number(ep) : 1);
+
+console.log("▶️ WATCH CONFIG:", {
+  subjectId,
+  detailPath,
+  season,
+  episode,
+});
 
   // Movie info
   const title = movie?.title || movie?.subject?.title || "Movie";

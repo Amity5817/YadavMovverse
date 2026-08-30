@@ -87,7 +87,12 @@ export default function HlsVideoPlayer({
 
       try {
         // 1. Details Fetch
-        const detailRes = await fetch(`/api/detail/${detailPath}?season=${currentSeason}`);
+        const detailRes = await fetch(
+          `/api/detail/${encodeURIComponent(detailPath)}?season=${currentSeason}&episode=${currentEpisode}`,
+          {
+            cache: "no-store",
+          }
+        );
         const detailData = await detailRes.json();
 
         const root = detailData?.data || {};
@@ -197,7 +202,7 @@ export default function HlsVideoPlayer({
             for (const q of qualityPriority) {
               // Skip 1080p if not VIP
               if (q === '1080p' && !isVipUser) continue;
-              
+
               const found = sortedMp4.find(s => s.resolution === q);
               if (found) {
                 selected = found;
@@ -208,8 +213,8 @@ export default function HlsVideoPlayer({
 
             // If no quality match, take first available (skip 1080p if not VIP)
             if (!selected) {
-              const available = isVipUser 
-                ? sortedMp4 
+              const available = isVipUser
+                ? sortedMp4
                 : sortedMp4.filter(s => s.resolution !== '1080p');
               selected = available[0];
               selectedQualityLabel = selected?.resolution || '480p';
@@ -479,15 +484,14 @@ export default function HlsVideoPlayer({
                   }
                   handleQualityChange(quality, proxied);
                 }}
-                className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-all relative ${
-                  isActive
+                className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-all relative ${isActive
                     ? "bg-rose-600 text-white shadow-lg shadow-rose-600/30"
                     : isLocked
-                    ? "bg-zinc-800/50 text-zinc-500 cursor-not-allowed border border-zinc-700/50"
-                    : isVipOnly
-                    ? "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                    : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-                }`}
+                      ? "bg-zinc-800/50 text-zinc-500 cursor-not-allowed border border-zinc-700/50"
+                      : isVipOnly
+                        ? "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                        : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                  }`}
                 disabled={isLocked}
               >
                 {quality}
@@ -537,11 +541,10 @@ export default function HlsVideoPlayer({
                 <button
                   key={epNum}
                   onClick={() => setCurrentEpisode(epNum)}
-                  className={`py-2 text-xs font-bold rounded-lg border transition-all ${
-                    isActive
+                  className={`py-2 text-xs font-bold rounded-lg border transition-all ${isActive
                       ? "bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-600/30"
                       : "bg-zinc-800/80 border-zinc-700/60 text-zinc-300 hover:bg-zinc-700"
-                  }`}
+                    }`}
                 >
                   Ep {epNum}
                 </button>
