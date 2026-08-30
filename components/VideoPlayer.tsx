@@ -16,13 +16,17 @@ interface Caption {
 }
 
 interface VideoPlayerProps {
-  subjectId: string;
-  detailPath: string;
+  src?: string;
+  poster?: string;
+  subjectId?: string;
+  detailPath?: string;
   season?: number;
   episode?: number;
 }
 
 export default function VideoPlayer({
+  src,
+  poster,
   subjectId,
   detailPath,
   season = 1,
@@ -30,66 +34,110 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const [sources, setSources] = useState<StreamSource[]>([]);
   const [captions, setCaptions] = useState<Caption[]>([]);
-  const [selectedStream, setSelectedStream] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(true);
+  const [selectedStream, setSelectedStream] = useState<string>(src ?? "");
+  const [loading, setLoading] = useState<boolean>(!src);
   const [error, setError] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    async function fetchStreamAndCaptions() {
-      setLoading(true);
+    // Direct video URL mode
+    if (src) {
+      setSelectedStream(src);
+      setLoading(false);
       setError("");
-      setSelectedStream("");
+      return;
+    }
 
-      try {
-        // 1. Fetch Streams (Video Quality Links)
-        const streamRes = await fetch(
-          `/api/stream/${subjectId}?detail_path=${detailPath}&se=${season}&ep=${episode}`
-        );
-        const streamData = await streamRes.json();
+    // API stream mode
+    if (!subjectId || !detailPath) {
+      setLoading(false);
+      setError("Video source is not available.");
+      return;
+    }
 
-        if (streamData.has_resource && streamData.sources?.length > 0) {
-          setSources(streamData.sources);
-          // Set highest quality by default
-          setSelectedStream(streamData.sources[0].url);
-        } else {
-          setError("Stream sources not available for this episode.");
+    const currentSubjectId = subjectId;
+    const currentDetailPath = detailPath;
+
+    
+
+      async function fetchStreamAndCaptions() {
+        if (!currentSubjectId || !currentDetailPath) {
+          setLoading(false);
+          setError("Video source is not available.");
+          return;
         }
 
-        // 2. Fetch Subtitles/Captions
-        const capRes = await fetch(
-          `/api/stream/${subjectId}/captions?detail_path=${detailPath}&se=${season}&ep=${episode}`
-        );
-        const capData = await capRes.json();
-        if (capData.captions) {
-          setCaptions(capData.captions);
+        setLoading(true);
+        setError("");
+        setSelectedStream("");
+
+        try {
+          const streamRes = await fetch(
+            `/api/stream/${currentSubjectId}?detail_path=${encodeURIComponent(
+              currentDetailPath
+            )}&se=${season}&ep=${episode}`
+          );
+
+          if (!streamRes.ok) {
+            throw new Error("Failed to fetch stream");
+          }
+
+          const streamData = await streamRes.json();
+
+          if (
+            streamData.has_resource &&
+            streamData.sources?.length > 0
+          ) {
+            setSources(streamData.sources);
+            setSelectedStream(streamData.sources[0].url);
+          } else {
+            setError(
+              "Stream sources not available for this episode."
+            );
+          }
+
+          const capRes = await fetch(
+            `/api/stream/${subjectId}/captions?detail_path=${encodeURIComponent(
+              detailPath
+            )}&se=${season}&ep=${episode}`
+          );
+
+          if (capRes.ok) {
+            const capData = await capRes.json();
+
+            if (capData.captions) {
+              setCaptions(capData.captions);
+            }
+          }
+        } catch (err) {
+          console.error("Video player error:", err);
+          setError("Failed to load player data from server.");
+        } finally {
+          setLoading(false);
         }
-      } catch (err) {
-        setError("Failed to load player data from server.");
-      } finally {
-        setLoading(false);
       }
-    }
 
-    if (subjectId && detailPath) {
       fetchStreamAndCaptions();
-    }
-  }, [subjectId, detailPath, season, episode]);
+    }, [src, subjectId, detailPath, season, episode]);
 
-  // Handle Dynamic Quality Switch without losing playback time
   const handleQualityChange = (newUrl: string) => {
-    if (!videoRef.current || newUrl === selectedStream) return;
+    if (!videoRef.current || newUrl === selectedStream) {
+      return;
+    }
+
     const currentTime = videoRef.current.currentTime;
     const isPlaying = !videoRef.current.paused;
 
     setSelectedStream(newUrl);
 
-    // Wait for src update then restore time
     setTimeout(() => {
       if (videoRef.current) {
         videoRef.current.currentTime = currentTime;
-        if (isPlaying) videoRef.current.play();
+
+        if (isPlaying) {
+          videoRef.current.play().catch(() => { });
+        }
       }
     }, 100);
   };
@@ -98,8 +146,10 @@ export default function VideoPlayer({
     return (
       <div className="flex h-96 w-full items-center justify-center rounded-2xl bg-zinc-900 text-white">
         <div className="text-center">
-          <div className="mb-2 h-8 w-8 animate-spin rounded-full border-4 border-rose-500 border-t-transparent mx-auto"></div>
-          <p className="text-sm text-zinc-400">Loading stream & subtitles...</p>
+          <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-4 border-rose-500 border-t-transparent" />
+          <p className="text-sm text-zinc-400">
+            Loading stream & subtitles...
+          </p>
         </div>
       </div>
     );
@@ -107,24 +157,23 @@ export default function VideoPlayer({
 
   if (error) {
     return (
-      <div className="flex h-64 w-full items-center justify-center rounded-2xl bg-zinc-900/50 border border-zinc-800 text-rose-500">
+      <div className="flex h-64 w-full items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/50 text-rose-500">
         <p>{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-4">
-      {/* Main Video Viewport */}
-      <div className="relative overflow-hidden rounded-2xl bg-black aspect-video shadow-2xl border border-zinc-800">
+    <div className="mx-auto w-full max-w-5xl space-y-4">
+      <div className="relative aspect-video overflow-hidden rounded-2xl border border-zinc-800 bg-black shadow-2xl">
         <video
           ref={videoRef}
           controls
           autoPlay
+          poster={poster}
           className="h-full w-full object-contain"
           src={selectedStream}
         >
-          {/* Inject Subtitle Tracks */}
           {captions.map((cap, idx) => (
             <track
               key={idx}
@@ -135,34 +184,41 @@ export default function VideoPlayer({
               default={idx === 0}
             />
           ))}
+
           Your browser does not support the video tag.
         </video>
       </div>
 
-      {/* Control Bar: Quality & Metadata */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-zinc-900 border border-zinc-800 text-white">
-        <div>
-          <h4 className="text-sm font-semibold text-zinc-300">Video Quality</h4>
-          <p className="text-xs text-zinc-500">Select preferred resolution</p>
-        </div>
+      {sources.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-white">
+          <div>
+            <h4 className="text-sm font-semibold text-zinc-300">
+              Video Quality
+            </h4>
 
-        {/* Dynamic Quality Selector */}
-        <div className="flex flex-wrap gap-2">
-          {sources.map((src, index) => (
-            <button
-              key={index}
-              onClick={() => handleQualityChange(src.url)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                selectedStream === src.url
-                  ? "bg-rose-600 text-white shadow-lg shadow-rose-600/30"
-                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-              }`}
-            >
-              {src.resolution} ({src.format})
-            </button>
-          ))}
+            <p className="text-xs text-zinc-500">
+              Select preferred resolution
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {sources.map((stream, index) => (
+              <button
+                key={index}
+                onClick={() =>
+                  handleQualityChange(stream.url)
+                }
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${selectedStream === stream.url
+                    ? "bg-rose-600 text-white shadow-lg shadow-rose-600/30"
+                    : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                  }`}
+              >
+                {stream.resolution} ({stream.format})
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -44,10 +44,10 @@ type ServerApiOptions = {
   body?: Record<string, unknown>;
 };
 
-export async function serverApi(
+export async function serverApi<T>(
   path: string,
   options: ServerApiOptions = {}
-) {
+): Promise<T> {
   const token = await getBearerToken();
 
   const headers = {
@@ -89,7 +89,7 @@ export async function serverApi(
   }
 
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch {
     throw new Error("Upstream returned invalid JSON");
   }
